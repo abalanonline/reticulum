@@ -15,16 +15,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ab.example;
+package rns;
 
-public class Main {
+public class Reticulum {
 
-  public int neg(int i) {
-    return Math.negateExact(i);
-  }
-
-  public static void main(String[] args) {
-    System.out.println("main");
-  }
+  public static final int TRUNCATED_HASHLENGTH = 128;
 
 }
