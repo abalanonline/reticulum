@@ -15,7 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package ab.ret;
+package ab;
 
 import rns.Identity;
 import rns.Packet;
@@ -27,12 +27,15 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
+import java.util.function.Consumer;
 
-public class TcpForwarder {
+public class TcpForwarder extends Thread {
 
   private int localPort;
   private String remoteHost;
   private int remotePort;
+  public Consumer<byte[]> inbound;
+  public Consumer<byte[]> outbound;
 
   public TcpForwarder(int localPort, String remoteHost, int remotePort) {
     this.localPort = localPort;
@@ -40,16 +43,17 @@ public class TcpForwarder {
     this.remotePort = remotePort;
   }
 
-  public void start() {
+  @Override
+  public void run() {
     try (ServerSocket serverSocket = new ServerSocket(localPort)) {
-      System.out.println("Listening on port " + localPort);
+      //System.out.println("Listening on port " + localPort);
 
       while (true) {
         Socket clientSocket = serverSocket.accept();
-        System.out.println("Accepted connection from " + clientSocket.getInetAddress());
+        //System.out.println("Accepted connection from " + clientSocket.getInetAddress());
 
         Socket remoteSocket = new Socket(remoteHost, remotePort);
-        System.out.println("Connected to remote " + remoteHost + ":" + remotePort);
+        //System.out.println("Connected to remote " + remoteHost + ":" + remotePort);
 
         new Thread(new Forwarder(clientSocket, remoteSocket)).start();
       }
@@ -58,7 +62,7 @@ public class TcpForwarder {
     }
   }
 
-  private static class Forwarder implements Runnable {
+  private class Forwarder implements Runnable {
     private Socket clientSocket;
     private Socket remoteSocket;
 
@@ -86,8 +90,8 @@ public class TcpForwarder {
 
     private void print(byte[] buffer, Socket destination) {
       buffer = Hdlc.decode(buffer);
-      Packet packet = new Packet(buffer);
-      if (packet.packetType == Packet.ANNOUNCE) Identity.validateAnnounce(packet);
+      Packet packet = new Packet(null, buffer);
+      if (packet.packet_type == Packet.ANNOUNCE) Identity.validate_announce(packet, true);
       StringBuilder s = new StringBuilder();
       int flags = buffer[0] & 0xFF;
 //      if (destination != remoteSocket) return;
@@ -114,7 +118,7 @@ public class TcpForwarder {
       s.append(buffer.length);
 
       s.append("\n  ");
-      s.append(toHex(buffer));
+      s.append(Utils.toHex(buffer));
       //s.append(" ").append(new String(buffer));
       s.append("\n");
       System.out.print(s);
@@ -126,7 +130,9 @@ public class TcpForwarder {
         byte[] buffer = new byte[4096];
         int bytesRead;
         while ((bytesRead = in.read(buffer)) != -1) {
-          print(Arrays.copyOf(buffer, bytesRead), destination);
+          Consumer<byte[]> consumer = destination == remoteSocket ? outbound : inbound;
+          if (consumer != null) consumer.accept(Arrays.copyOf(buffer, bytesRead));
+          //print(Arrays.copyOf(buffer, bytesRead), destination);
           out.write(buffer, 0, bytesRead);
           out.flush();
         }
@@ -134,12 +140,6 @@ public class TcpForwarder {
         e.printStackTrace();
       }
     }
-  }
-
-  public static String toHex(byte[] bytes) {
-    StringBuilder s = new StringBuilder();
-    for (byte b : bytes) s.append(String.format("%02X", b));
-    return s.toString();
   }
 
   public static void main(String[] args) {
@@ -153,6 +153,6 @@ public class TcpForwarder {
     int remotePort = Integer.parseInt(args[2]);
 
     TcpForwarder forwarder = new TcpForwarder(localPort, remoteHost, remotePort);
-    forwarder.start();
+    forwarder.run();
   }
 }

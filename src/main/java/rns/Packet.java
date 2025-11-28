@@ -17,8 +17,30 @@
 
 package rns;
 
+import ab.Utils;
+
 import java.util.Arrays;
 
+/**
+ * The Packet class is used to create packet instances that can be sent
+ * over a Reticulum network. Packets will automatically be encrypted if
+ * they are addressed to a ``RNS.Destination.SINGLE`` destination,
+ * ``RNS.Destination.GROUP`` destination or a :ref:`RNS.Link<api-link>`.
+ *
+ * For ``RNS.Destination.GROUP`` destinations, Reticulum will use the
+ * pre-shared key configured for the destination. All packets to group
+ * destinations are encrypted with the same AES-256 key.
+ *
+ * For ``RNS.Destination.SINGLE`` destinations, Reticulum will use a newly
+ * derived ephemeral AES-256 key for every packet.
+ *
+ * For :ref:`RNS.Link<api-link>` destinations, Reticulum will use per-link
+ * ephemeral keys, and offers **Forward Secrecy**.
+ *
+ * :param destination: A :ref:`RNS.Destination<api-destination>` instance to which the packet will be sent.
+ * :param data: The data payload to be included in the packet as *bytes*.
+ * :param create_receipt: Specifies whether a :ref:`RNS.PacketReceipt<api-packetreceipt>` should be created when instantiating the packet.
+ */
 public class Packet {
 
   public static final int DST_LEN = Reticulum.TRUNCATED_HASHLENGTH / 8;
@@ -32,38 +54,69 @@ public class Packet {
   public static final int ANNOUNCE = 1;
   public static final int LINKREQUEST = 2;
   public static final int PROOF = 3;
+  // Packet context types
+  public static final int PATH_RESPONSE = 0x0B;
 
   int flags;
   int hops;
-  int headerType;
-  int contextFlag;
-  int transportType;
-  int destinationType;
-  public int packetType;
-  byte[] transportId;
-  byte[] destinationHash;
+  int header_type;
+  int context_flag;
+  int transport_type;
+  int destination_type;
+  public int packet_type;
+  byte[] transport_id;
+  byte[] destination_hash;
   int context;
   byte[] data;
 
-  public Packet(byte[] raw) {
-    unpack(this, raw);
+  byte[] raw;
+  boolean packed;
+  boolean fromPacked;
+  boolean create_receipt;
+  byte[] packet_hash;
+
+  public Packet(Object destination, byte[] data) {
+    if (destination != null) {
+      throw new IllegalStateException();
+    } else {
+      raw = data;
+      packed = true;
+      fromPacked = true;
+      create_receipt = false;
+    }
   }
 
-  public void unpack(Packet p, byte[] raw) {
-    p.flags = raw[0];
-    p.hops = raw[0];
-    p.headerType = flags >> 6 & 1;
-    p.contextFlag = flags >> 5 & 1;
-    p.transportType = flags >> 4 & 1;
-    p.destinationType = flags >> 2 & 3;
-    p.packetType = flags & 3;
+  public boolean unpack() {
+    flags = raw[0];
+    hops = raw[0];
+    header_type = flags >> 6 & 1;
+    context_flag = flags >> 5 & 1;
+    transport_type = flags >> 4 & 1;
+    destination_type = flags >> 2 & 3;
+    packet_type = flags & 3;
     int i = 2;
-    p.transportId = p.headerType == HEADER_2 ? Arrays.copyOfRange(raw, i, i + DST_LEN) : null;
-    if (p.headerType == HEADER_2) i += DST_LEN;
-    p.destinationHash = Arrays.copyOfRange(raw, i, i + DST_LEN);
+    transport_id = header_type == HEADER_2 ? Arrays.copyOfRange(raw, i, i + DST_LEN) : null;
+    if (header_type == HEADER_2) i += DST_LEN;
+    destination_hash = Arrays.copyOfRange(raw, i, i + DST_LEN);
     i += DST_LEN;
-    p.context = raw[i++];
-    p.data = Arrays.copyOfRange(raw, i, raw.length);
+    context = raw[i++];
+    data = Arrays.copyOfRange(raw, i, raw.length);
+    packed = false;
+    update_hash();
+    return true;
+  }
+
+  void update_hash() { // 347
+    packet_hash = get_hash();
+  }
+
+  byte[] get_hash() { // 350
+    return rns.Identity.full_hash(get_hashable_part());
+  }
+
+  byte[] get_hashable_part() { // 356
+    return Utils.concatenate(new byte[]{(byte) (raw[0] & 0x0F)},
+        Arrays.copyOfRange(raw, 2 + header_type == HEADER_2 ? Reticulum.TRUNCATED_HASHLENGTH / 8 : 0, raw.length));
   }
 
 }

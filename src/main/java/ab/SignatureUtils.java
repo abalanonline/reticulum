@@ -15,12 +15,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package rns;
+package ab;
 
 import org.bouncycastle.jcajce.spec.RawEncodedKeySpec;
 
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Security;
 import java.security.Signature;
@@ -29,6 +31,14 @@ public class SignatureUtils {
 
   static {
     Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+  }
+
+  public static byte[] sha256(byte[] bytes) {
+    try {
+      return MessageDigest.getInstance("SHA-256").digest(bytes);
+    } catch (NoSuchAlgorithmException e) {
+      throw new Error(e);
+    }
   }
 
   public static boolean verify25519(byte[] key, byte[] signature, byte[] data) {

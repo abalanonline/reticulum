@@ -30,6 +30,21 @@ public class Hdlc {
     return null;
   }
 
+  public static byte[] unescape(byte[] data) {
+    byte[] bytes = new byte[data.length];
+    int length = 0;
+    for (int i = 0; i < data.length; i++) {
+      byte b = data[i];
+      if (b == FLAG) throw new IllegalStateException(); // end of frame
+      if (b == ESCAPE) {
+        b = (byte) (data[++i] ^ MASK);
+        if (b != FLAG && b != ESCAPE) throw new IllegalStateException();
+      }
+      bytes[length++] = b;
+    }
+    return Arrays.copyOf(bytes, length);
+  }
+
   public static byte[] decode(byte[] data) {
     if (data.length < 1 || data[0] != FLAG) throw new IllegalStateException();
     byte[] bytes = new byte[data.length];
